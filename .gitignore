@@ -1,0 +1,28 @@
+## .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+*.nupkg
+*.snupkg
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+.vs/
+**/.vs/
+**/Properties/launchSettings.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Rider / VS Code
+.idea/
+.vscode/
+*.swp
