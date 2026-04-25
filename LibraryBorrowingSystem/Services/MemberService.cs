@@ -1,10 +1,11 @@
 using LibraryBorrowingSystem.Dtos.Request;
 using LibraryBorrowingSystem.Dtos.Response;
 using LibraryBorrowingSystem.Repositories;
+using LibraryBorrowingSystem.Models;
 
 namespace LibraryBorrowingSystem.Services;
 
-// TODO (Issue 3): Implement full business logic
+// TODO (Issue 3): Implement full business logic (DONE JUST NEED TO TEST)
 public class MemberService : IMemberService
 {
     private readonly IMemberRepository _memberRepository;
@@ -38,8 +39,73 @@ public class MemberService : IMemberService
             MembershipDate = member.MembershipDate
         };
     }
+    public async Task<MemberResponseDto> CreateAsync(CreateMemberDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FullName))
+            throw new ArgumentException("Full name is required.");
 
-    public Task<MemberResponseDto> CreateAsync(CreateMemberDto dto) => throw new NotImplementedException("Issue 3");
-    public Task<MemberResponseDto?> UpdateAsync(int id, UpdateMemberDto dto) => throw new NotImplementedException("Issue 3");
-    public Task<bool> DeleteAsync(int id) => throw new NotImplementedException("Issue 3");
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            throw new ArgumentException("Email is required.");
+
+        if (!dto.Email.Contains("@"))
+            throw new ArgumentException("Email must be valid.");
+
+        var member = new Member
+        {
+            FullName = dto.FullName.Trim(),
+            Email = dto.Email.Trim(),
+            MembershipDate = DateTime.UtcNow
+        };
+
+        var created = await _memberRepository.AddAsync(member);
+
+        return new MemberResponseDto
+        {
+            Id = created.Id,
+            FullName = created.FullName,
+            Email = created.Email,
+            MembershipDate = created.MembershipDate
+        };
+    }
+
+    public async Task<MemberResponseDto?> UpdateAsync(int id, UpdateMemberDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FullName))
+            throw new ArgumentException("Full name is required.");
+
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            throw new ArgumentException("Email is required.");
+
+        if (!dto.Email.Contains("@"))
+            throw new ArgumentException("Email must be valid.");
+
+        var member = await _memberRepository.GetByIdAsync(id);
+
+        if (member is null)
+            return null;
+
+        member.FullName = dto.FullName.Trim();
+        member.Email = dto.Email.Trim();
+
+        var updated = await _memberRepository.UpdateAsync(member);
+
+        return new MemberResponseDto
+        {
+            Id = updated.Id,
+            FullName = updated.FullName,
+            Email = updated.Email,
+            MembershipDate = updated.MembershipDate
+        };
+    }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var member = await _memberRepository.GetByIdAsync(id);
+
+        if (member is null)
+            return false;
+
+        await _memberRepository.DeleteAsync(member);
+        return true;
+    }
 }
