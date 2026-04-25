@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LibraryBorrowingSystem.Controllers;
 
-
 [ApiController]
 [Route("api/books")]
 public class BooksController : ControllerBase
@@ -35,16 +34,30 @@ public class BooksController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<BookResponseDto>> Create([FromBody] CreateBookDto dto)
     {
-        var created = await _bookService.CreateAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        try
+        {
+            var created = await _bookService.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse(ex.Message));
+        }
     }
 
     [HttpPut("{id:int}")]
     public async Task<ActionResult<BookResponseDto>> Update(int id, [FromBody] UpdateBookDto dto)
     {
-        var updated = await _bookService.UpdateAsync(id, dto);
-        if (updated is null) return NotFound(new ErrorResponse("Book not found."));
-        return Ok(updated);
+        try
+        {
+            var updated = await _bookService.UpdateAsync(id, dto);
+            if (updated is null) return NotFound(new ErrorResponse("Book not found."));
+            return Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse(ex.Message));
+        }
     }
 
     [HttpDelete("{id:int}")]
