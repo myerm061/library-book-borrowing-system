@@ -62,6 +62,7 @@ This project includes comprehensive documentation:
 - **[DESIGN_DOCUMENT.md](DESIGN_DOCUMENT.md)** - Detailed system architecture, design patterns, and implementation decisions
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Complete testing checklist covering all endpoints, validation, error handling, concurrency, and caching
 - **[DEMO_SCRIPT.md](DEMO_SCRIPT.md)** - Step-by-step guide for demonstrating all features with example requests and expected responses
+- **[TEAM_CONTRIBUTIONS.md](TEAM_CONTRIBUTIONS.md)** - Detailed breakdown of each team member's contributions and responsibilities
 
 ## Team Contributions
 
