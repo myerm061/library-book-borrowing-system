@@ -1,7 +1,11 @@
+// GlobalExceptionMiddleware.cs
+
 using System.Net;
 using System.Text.Json;
 using LibraryBorrowingSystem.Dtos.Response;
+using LibraryBorrowingSystem.Exceptions;
 
+// namespace(s)
 namespace LibraryBorrowingSystem.Middleware;
 
 public class GlobalExceptionMiddleware
@@ -24,16 +28,23 @@ public class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception occurred.");
-            await HandleExceptionAsync(context);
+            await HandleExceptionAsync(context, ex);
         }
     }
 
-    private static async Task HandleExceptionAsync(HttpContext context)
+
+    private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
-        var response = new ErrorResponse("An unexpected error occurred.");
+        var (statusCode, message) = exception switch
+        {
+            ApiException apiException => (apiException.StatusCode, apiException.Message),
+            _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred.")
+        };
+
+        context.Response.StatusCode = statusCode;
+        var response = new ErrorResponse(message);
         var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase

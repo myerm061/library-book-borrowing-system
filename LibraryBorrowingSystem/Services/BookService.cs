@@ -11,9 +11,6 @@ public class BookService : IBookService
     private readonly IBookRepository _bookRepository;
     private readonly IMemoryCache _cache;
 
-    private const string AllBooksCacheKey = "books_all";
-    private static string BookCacheKey(int id) => $"book_{id}";
-
     public BookService(IBookRepository bookRepository, IMemoryCache cache)
     {
         _bookRepository = bookRepository;
@@ -22,18 +19,18 @@ public class BookService : IBookService
 
     public async Task<IEnumerable<BookResponseDto>> GetAllAsync()
     {
-        if (_cache.TryGetValue(AllBooksCacheKey, out IEnumerable<BookResponseDto>? cached) && cached is not null)
+        if (_cache.TryGetValue(BookCacheKeys.AllBooks, out IEnumerable<BookResponseDto>? cached) && cached is not null)
             return cached;
 
         var books = await _bookRepository.GetAllAsync();
         var result = books.Select(MapToDto).ToList();
-        _cache.Set(AllBooksCacheKey, result);
+        _cache.Set(BookCacheKeys.AllBooks, result);
         return result;
     }
 
     public async Task<BookResponseDto?> GetByIdAsync(int id)
     {
-        var cacheKey = BookCacheKey(id);
+        var cacheKey = BookCacheKeys.ById(id);
         if (_cache.TryGetValue(cacheKey, out BookResponseDto? cached))
             return cached;
 
@@ -59,7 +56,7 @@ public class BookService : IBookService
         };
 
         var created = await _bookRepository.AddAsync(book);
-        _cache.Remove(AllBooksCacheKey);
+        _cache.Remove(BookCacheKeys.AllBooks);
         return MapToDto(created);
     }
 
@@ -77,8 +74,8 @@ public class BookService : IBookService
         book.AvailableCopies = dto.AvailableCopies;
 
         var updated = await _bookRepository.UpdateAsync(book);
-        _cache.Remove(AllBooksCacheKey);
-        _cache.Remove(BookCacheKey(id));
+        _cache.Remove(BookCacheKeys.AllBooks);
+        _cache.Remove(BookCacheKeys.ById(id));
         return MapToDto(updated);
     }
 
@@ -88,8 +85,8 @@ public class BookService : IBookService
         if (book is null) return false;
 
         await _bookRepository.DeleteAsync(book);
-        _cache.Remove(AllBooksCacheKey);
-        _cache.Remove(BookCacheKey(id));
+        _cache.Remove(BookCacheKeys.AllBooks);
+        _cache.Remove(BookCacheKeys.ById(id));
         return true;
     }
 
