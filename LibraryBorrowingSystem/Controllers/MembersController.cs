@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LibraryBorrowingSystem.Controllers;
 
-// TODO (Issue 3): Add full validation and error handling (DONE JUST NEED TO TEST)
 [ApiController]
 [Route("api/members")]
 public class MembersController : ControllerBase

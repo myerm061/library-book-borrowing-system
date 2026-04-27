@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using LibraryBorrowingSystem.Dtos.Request;
 using LibraryBorrowingSystem.Dtos.Response;
 using LibraryBorrowingSystem.Repositories;
@@ -5,7 +6,6 @@ using LibraryBorrowingSystem.Models;
 
 namespace LibraryBorrowingSystem.Services;
 
-// TODO (Issue 3): Implement full business logic (DONE JUST NEED TO TEST)
 public class MemberService : IMemberService
 {
     private readonly IMemberRepository _memberRepository;
@@ -47,7 +47,7 @@ public class MemberService : IMemberService
         if (string.IsNullOrWhiteSpace(dto.Email))
             throw new ArgumentException("Email is required.");
 
-        if (!dto.Email.Contains("@"))
+        if (!new EmailAddressAttribute().IsValid(dto.Email))
             throw new ArgumentException("Email must be valid.");
 
         var member = new Member
@@ -76,7 +76,7 @@ public class MemberService : IMemberService
         if (string.IsNullOrWhiteSpace(dto.Email))
             throw new ArgumentException("Email is required.");
 
-        if (!dto.Email.Contains("@"))
+        if (!new EmailAddressAttribute().IsValid(dto.Email))
             throw new ArgumentException("Email must be valid.");
 
         var member = await _memberRepository.GetByIdAsync(id);

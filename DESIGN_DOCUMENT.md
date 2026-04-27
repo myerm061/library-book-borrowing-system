@@ -290,9 +290,9 @@ All validation errors return **400 Bad Request** with ErrorResponse:
 ```
 
 ### 4. Validation Error Handling
-- Model validation errors → caught by controller filters
-- Business logic validation → returned as (null, error) tuple from services
-- Controllers check error and return BadRequest with ErrorResponse
+- **Model validation** (DataAnnotations on DTOs): the `[ApiController]` attribute on each controller automatically returns **400 Bad Request** when `ModelState.IsValid` is false, before any service code runs.
+- **Business-rule validation** (Service layer): services throw typed exceptions from the `ApiException` hierarchy — `BadRequestException` (400), `NotFoundException` (404), `ConflictException` (409).
+- **Centralized translation**: `GlobalExceptionMiddleware` catches every `ApiException`, maps it to the matching HTTP status code, and writes a JSON body in the form `{"error": "..."}`. Stack traces are never sent to the client.
 
 ---
 
@@ -407,56 +407,65 @@ T1      → Borrow Request
                                   → Borrow Request          Available: 1
 T2      Read available = 1
                                   Read available = 1
-T3      Check: 1 > 0 ✓            Check: 1 > 0 ✓
+T3      Check: 1 > 0 good            Check: 1 > 0 good
 T4      Decrement: 0
 T5      Commit                                              Available: 0
 T6      Return Success
                                   Decrement: 0
-T7                                Commit                    Available: -1 ❌
+T7                                Commit                    Available: -1 bad
 T8                                Return Success (ERROR!)
 ```
 
-### Solution: Pessimistic Concurrency Control
+### Solution: Per-Book In-Process Serialization (`SemaphoreSlim`)
 
-The service layer implements **book-level locking** via Entity Framework Core:
+The system uses the EF Core **InMemory** provider, which does not support real database transactions or `RowVersion`-based optimistic concurrency. To still guarantee correctness for the "two members borrow the last copy" scenario, the service layer serializes the critical section per book using a `SemaphoreSlim` keyed by `BookId`:
 
 ```csharp
-public async Task<(BorrowRecordResponseDto? Record, string? Error)> BorrowBookAsync(BorrowRequestDto dto)
+private static readonly ConcurrentDictionary<int, SemaphoreSlim> BookLocks = new();
+
+public async Task<BorrowRecordResponseDto> BorrowBookAsync(BorrowRequestDto dto)
 {
-    // Validate inputs
-    var book = await _bookRepository.GetByIdAsync(dto.BookId);
-    if (book is null) return (null, "Book not found.");
+    var member = await _memberRepository.GetByIdAsync(dto.MemberId)
+        ?? throw new NotFoundException("Member not found.");
 
-    // Lock on the book entity
-    var lockedBook = await _bookRepository.GetByIdWithLockAsync(dto.BookId);
-
-    if (lockedBook.AvailableCopies <= 0)
-        return (null, "Book is not available.");
-
-    // Safe to decrement within lock
-    lockedBook.AvailableCopies--;
-
-    // Create borrow record
-    var record = new BorrowRecord
+    var bookLock = BookLocks.GetOrAdd(dto.BookId, _ => new SemaphoreSlim(1, 1));
+    await bookLock.WaitAsync();
+    try
     {
-        BookId = dto.BookId,
-        MemberId = dto.MemberId,
-        BorrowDate = DateTime.UtcNow,
-        Status = "Borrowed"
-    };
+        var book = await _bookRepository.GetByIdForUpdateAsync(dto.BookId)
+            ?? throw new NotFoundException("Book not found.");
 
-    await _borrowRepository.AddAsync(record);
-    await _bookRepository.UpdateAsync(lockedBook);
+        if (book.AvailableCopies <= 0)
+            throw new ConflictException("No available copies for this book.");
 
-    return (borrowRecordDto, null);
+        book.AvailableCopies--;
+
+        var record = new BorrowRecord
+        {
+            BookId = dto.BookId,
+            MemberId = dto.MemberId,
+            BorrowDate = DateTime.UtcNow,
+            Status = BorrowedStatus
+        };
+
+        await _borrowRepository.AddAsync(record);
+        await _bookRepository.UpdateAsync(book);
+        InvalidateBookCache(dto.BookId);
+
+        return MapToDto(record);
+    }
+    finally
+    {
+        bookLock.Release();
+    }
 }
 ```
 
 ### Implementation Details
-- **Lock Granularity:** Per-book locks (not database-wide)
-- **Lock Duration:** Only held during availability check and update
-- **Failure Handling:** Returns error message if unavailable
-- **Database Transaction:** All operations within single transaction
+- **Lock Granularity:** One `SemaphoreSlim` per `BookId`, stored in a `static ConcurrentDictionary` so all requests in the process share the same lock for a given book. Different books do not contend with each other.
+- **Lock Duration:** Held only across the read-decrement-persist sequence; released in `finally` so an exception cannot leak a permit.
+- **Why this works for the rubric scenario:** Two simultaneous `POST /api/borrow` requests for the same `BookId` are forced to run serially. The second request observes `AvailableCopies == 0` and throws `ConflictException`, which the global middleware translates to a `409 Conflict` with `{"error": "No available copies for this book."}`. `AvailableCopies` can never go below zero.
+- **Production note:** This is an in-process mechanism — it serializes within one application instance only. A multi-instance deployment backed by a real RDBMS (SQL Server, PostgreSQL) would replace this with `BeginTransactionAsync` plus a `[Timestamp] RowVersion` column on `Book`, retrying on `DbUpdateConcurrencyException`. The service-layer shape would not change; only the `IBookRepository` implementation would.
 
 ### Result After Fix
 
@@ -468,13 +477,13 @@ T1      → Borrow Request
 T2      Acquire Lock on Book 1
                                   Wait for Lock...
 T3      Read available = 1
-T4      Check: 1 > 0 ✓
+T4      Check: 1 > 0 good
 T5      Decrement: 0
 T6      Release Lock                                        Available: 0
 T7      Return Success
 T8                                Acquire Lock on Book 1
 T9                                Read available = 0
-T10                               Check: 0 > 0 ✗
+T10                               Check: 0 > 0 bad
 T11                               Return Error: "Not available"
 ```
 
